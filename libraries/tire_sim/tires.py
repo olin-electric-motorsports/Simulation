@@ -1,30 +1,10 @@
-"""
-Script to filter out TTC data and grab indices for camber, pressure + normal force.
-
-ET = elasped time
-V = speed
-N?
-SA = slip angle
-IA = Camber angle
-RL
-RE
-P = pressure
-FX = long force
-FY = lat force
-FZ = normal force
-MX = roll moment?
-MZ = overturning moment?
-AMBTMP = ambient temp
-SR = slip ratio
-
-"""
-
 import pandas as pd
 from scipy.io import loadmat
 import numpy as np
 import matplotlib.pyplot as plt
 from enum import Enum, auto
 from pprint import pprint
+from collections import defaultdict
 
 
 class Stats(Enum):
@@ -63,101 +43,105 @@ class TireParser:
         :type path_to_data_spreadsheet: _type_
         """
         summary_data = pd.read_excel(path_to_summary_table)
-        raw_data = loadmat(path_to_data_spreadsheet)
-
-        self.tireid = raw_data["tireid"]
+        self.load_data(path_to_data_spreadsheet)
         print(f"Tire ID being queried: {self.tireid}")
+        self.time_range = self.compute_time_range()
+        self.complete_data = self._e()
 
-        self.normal_force_data = raw_data["FZ"]
+    def load_data(self, path_to_data_spreadsheet):
+        """Load data into attributes to our tire parser from the spreadsheet.
+        We care primarily about normal force, pressure, and camber data.
+
+        :param path_to_data_spreadsheet: _description_
+        :type path_to_data_spreadsheet: _type_
+        """
+        raw_data = loadmat(path_to_data_spreadsheet)
+        self.tireid = raw_data["tireid"]
+
+        self.normforce_data = raw_data["FZ"]
         self.pressure_data = raw_data["P"]
         self.camber_data = raw_data["IA"]
+        self.parameter_data = [
+            self.normforce_data,
+            self.pressure_data,
+            self.camber_data,
+        ]
 
-        self.camber = self.find_indices(self.camber_data, Stats.CAMBER_ANGLE)
-        self.normal_force = self.find_indices(
-            self.normal_force_data, Stats.NORMAL_FORCE
-        )
-        # pprint(self.normal_force)
-        self.pressure = self.find_indices(self.pressure_data, Stats.PRESSURE)
+        self.latforce_data = raw_data["FY"]
+        self.slip_data = raw_data["SR"]
 
-        self.complete_dict = {
-            Stats.CAMBER_ANGLE.name: self.camber,
-            Stats.NORMAL_FORCE.name: self.normal_force,
-            Stats.PRESSURE.name: self.pressure,
-        }
-        pprint(self.complete_dict)
+    def compute_time_range(self):
+        """TODO: validation, not just checking normforce data
 
-    def find_indices(self, data_column, key):
-        """
-        Given a data column and key, find the indices were a different "test" has occurred.
-
-        Determine differences by TOLERANCE dictionary.
-
-        :param data_column: _description_
-        :type data_column: _type_
-        :param key: _description_
-        :type key: _type_
         :return: _description_
         :rtype: _type_
         """
+        return len(self.normforce_data)
 
-        unique = {}
-        curr_val = data_column[0]
-        for i, val in enumerate(data_column):
-            if abs(val - curr_val) > TOLERANCE[key]:
-                # FIGURE OUT HOW TO MAKE THIS AN ESTIMATED INSTEAD OF A SPECIFIC VAL
-                unique[float(curr_val)] = i
-                # print(val, curr_val)
-                curr_val = val
+    def append_all_data(self, dict_to_append_to: defaultdict, idx):
+        dict_to_append_to[idx].append(
+            (Stats.NORMAL_FORCE.name, float(self.normforce_data[idx][0]))
+        )
+        dict_to_append_to[idx].append(
+            (Stats.PRESSURE.name, float(self.pressure_data[idx][0]))
+        )
+        dict_to_append_to[idx].append(
+            (Stats.CAMBER_ANGLE.name, float(self.camber_data[idx][0]))
+        )
+        return dict_to_append_to
 
-        return unique
+    def _e(self):
+        """This function is responsible for creating a dictionary.
 
-    def find_compliant_values(self, config_dict):
+        {
+            TIME_STEP : [(NORMAL FORCE, ____), (PRESSURE, ______), (CAMBER, _____)]
+        }
         """
-        based on a specified set of values, find the indices that satisfy all of those conditions
+        data_dict = defaultdict(list)
+        old_normforce = self.normforce_data[0]
+        old_pressure = self.pressure_data[0]
+        old_camber = self.camber_data[0]
+        self.append_all_data(data_dict, 0)
+        for i in range(self.time_range - 1):
+            if not old_normforce or (
+                abs(old_normforce - self.normforce_data[i])
+                > TOLERANCE[Stats.NORMAL_FORCE]
+            ):
+                data_dict = self.append_all_data(data_dict, i)
+                old_normforce = self.normforce_data[i]
+            if (
+                not old_pressure
+                or abs(old_pressure - self.pressure_data[i]) > TOLERANCE[Stats.PRESSURE]
+            ):
+                data_dict = self.append_all_data(data_dict, i)
+                old_pressure = self.pressure_data[i]
+            if (
+                not old_camber
+                or abs(old_camber - self.camber_data[i]) > TOLERANCE[Stats.CAMBER_ANGLE]
+            ):
+                data_dict = self.append_all_data(data_dict, i)
+                old_camber = self.camber_data[i]
 
-        :param config_dict: _description_
-        :type config_dict: _type_
-        :param complete_dict: _description_
-        :type complete_dict: _type_
-        """
+        return data_dict
 
-        # self.complete_dict
+    def display_data(self):
+        """For every different value of pressure, camber, and normal force, compute the SR + Lateral force graph"""
+        times = list(self.complete_data.keys())
 
-    def query(self, **kwargs):
-        """
-        Given a set of keyword arguments, find the data that satisfies all of those conditions
+        for i in range(len(times)):
+            if i == 0:
+                continue
 
-        :param kwargs: _description_
-        :type kwargs: _type_
-        """
-        config = {}
-        for arg in kwargs:
-            # NAME OF SETTING
-            setting = list(kwargs[arg].keys())[0]
-            value = list(kwargs[arg].values())[0]
-            config[setting] = value
-
-        self.find_compliant_values(config)
-        pass
-
-    def show_data(self, data, index_dict, title=None):
-        """
-        Show a set of data with certain indices highlighted
-
-        :param data: _description_
-        :type data: _type_
-        :param indices: _description_
-        :type indices: _type_
-        :param title: _description_, defaults to None
-        :type title: _type_, optional
-        """
-        plt.plot(data)
-        # this iterates through the keys, which are indexes
-        for index in index_dict:
-            plt.axvline(x=index_dict[index], color="red")
-
-        plt.title(title)
-        plt.show()
+            plt.plot(
+                self.latforce_data[times[i - 1] : times[i]],
+                self.slip_data[times[i - 1] : times[i]],
+            )
+            plt.xlabel("Latforce")
+            plt.ylabel("Slip")
+            plt.title(
+                f"Normal Force = {self.complete_data[times[i]][0][1]} || Camber = {self.complete_data[times[i]][1][1]} || Pressure = {self.complete_data[times[i]][2][1]}\n"
+            )
+            plt.show()
 
 
 if __name__ == "__main__":
@@ -166,13 +150,8 @@ if __name__ == "__main__":
         path_to_data_spreadsheet="assets/tire_data/B1464run19.mat",
     )
 
-    parser.query(val1={Stats.CAMBER_ANGLE: 2.004})
-
-    pattern = parser.camber
-    # parser.show_data(parser.camber_data, pattern, "camber on camber")
-    # parser.show_data(
-    #     parser.normal_force_data,
-    #     pattern,
-    #     "camber on normal force",
-    # )
-    # parser.show_data(parser.pressure_data, pattern, "camber on pressure")
+    parser.display_data()
+    # pprint(parser.normforce_data)
+    # print(len(parser.camber_data))
+    # pprint(parser.complete_data)
+    # print(parser.complete_data.keys())
