@@ -133,11 +133,11 @@ class TireParser:
                 continue
 
             plt.plot(
-                self.latforce_data[times[i - 1] : times[i]],
                 self.slip_data[times[i - 1] : times[i]],
+                self.latforce_data[times[i - 1] : times[i]],
             )
-            plt.xlabel("Latforce")
-            plt.ylabel("Slip")
+            plt.xlabel("Slip")
+            plt.ylabel("Lateral Force")
             plt.title(
                 f"Normal Force = {self.complete_data[times[i]][0][1]} || Camber = {self.complete_data[times[i]][1][1]} || Pressure = {self.complete_data[times[i]][2][1]}\n"
             )
