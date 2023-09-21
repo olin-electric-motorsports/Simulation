@@ -1,3 +1,24 @@
+"""
+Script to filter out TTC data and grab indices for camber, pressure + normal force. 
+
+We need a graph of slip angle v.s. lateral force (Fy) for every set of camber, pressure, and normal force
+
+ET = elasped time
+V = speed
+N?
+SA = slip angle
+IA = Camber angle
+RL
+RE
+P = pressure
+FX = long force
+FY = lat force
+FZ = normal force
+MX = roll moment?
+MZ = overturning moment?
+AMBTMP = ambient temp
+SR = slip ratio
+"""
 import pandas as pd
 from scipy.io import loadmat
 import numpy as np
@@ -27,8 +48,8 @@ class Stats(Enum):
 
 TOLERANCE = {
     Stats.CAMBER_ANGLE: 0.5,
-    Stats.NORMAL_FORCE: 500,
-    Stats.PRESSURE: 25,
+    Stats.NORMAL_FORCE: 100,
+    Stats.PRESSURE: 10,
 }
 
 
@@ -46,7 +67,7 @@ class TireParser:
         self.load_data(path_to_data_spreadsheet)
         print(f"Tire ID being queried: {self.tireid}")
         self.time_range = self.compute_time_range()
-        self.complete_data = self._e()
+        self.complete_data = self.create_complete_data_dict()
 
     def load_data(self, path_to_data_spreadsheet):
         """Load data into attributes to our tire parser from the spreadsheet.
@@ -68,7 +89,7 @@ class TireParser:
         ]
 
         self.latforce_data = raw_data["FY"]
-        self.slip_data = raw_data["SR"]
+        self.slip_data = raw_data["SA"]
 
     def compute_time_range(self):
         """TODO: validation, not just checking normforce data
@@ -79,6 +100,16 @@ class TireParser:
         return len(self.normforce_data)
 
     def append_all_data(self, dict_to_append_to: defaultdict, idx):
+        """Append the NORMAL_FORCE,PRESSURE,CAMBER_ANGLE values as a tuple
+        to the data dictionary
+
+        :param dict_to_append_to: _description_
+        :type dict_to_append_to: defaultdict
+        :param idx: _description_
+        :type idx: _type_
+        :return: _description_
+        :rtype: _type_
+        """
         dict_to_append_to[idx].append(
             (Stats.NORMAL_FORCE.name, float(self.normforce_data[idx][0]))
         )
@@ -90,12 +121,15 @@ class TireParser:
         )
         return dict_to_append_to
 
-    def _e(self):
+    def create_complete_data_dict(self):
         """This function is responsible for creating a dictionary.
 
         {
             TIME_STEP : [(NORMAL FORCE, ____), (PRESSURE, ______), (CAMBER, _____)]
         }
+
+        At any time step where a significantly new normal force, pressure, or camber
+        is detected, we generate a new dictionary key/value pair, always of this form.
         """
         data_dict = defaultdict(list)
         old_normforce = self.normforce_data[0]
@@ -127,21 +161,40 @@ class TireParser:
     def display_data(self):
         """For every different value of pressure, camber, and normal force, compute the SR + Lateral force graph"""
         times = list(self.complete_data.keys())
-
+        print(len(times))
         for i in range(len(times)):
             if i == 0:
                 continue
 
-            plt.plot(
+            if (
+                max(self.slip_data[times[i - 1] : times[i]]) > 0
+                and min(self.slip_data[times[i - 1] : times[i]]) > 0
+            ):
+                continue
+
+            if (
+                max(self.slip_data[times[i - 1] : times[i]]) < 0
+                and min(self.slip_data[times[i - 1] : times[i]]) < 0
+            ):
+                continue
+            plt.scatter(
                 self.slip_data[times[i - 1] : times[i]],
                 self.latforce_data[times[i - 1] : times[i]],
+                marker="o",
+            )
+            plt.figtext(
+                0.1,
+                -0.001,
+                f"slip data length: {len(self.slip_data[times[i - 1] : times[i]])}",
             )
             plt.xlabel("Slip")
             plt.ylabel("Lateral Force")
             plt.title(
-                f"Normal Force = {self.complete_data[times[i]][0][1]} || Camber = {self.complete_data[times[i]][1][1]} || Pressure = {self.complete_data[times[i]][2][1]}\n"
+                f"Normal Force = {self.complete_data[times[i]][0][1]} || Pressure = {self.complete_data[times[i]][1][1]} || Camber = {self.complete_data[times[i]][2][1]}\n"
             )
-            plt.show()
+            plt.savefig(f"assets/imgs/graph #{i}.png", format="png")
+            plt.clf()
+            # plt.show()
 
 
 if __name__ == "__main__":
@@ -151,6 +204,8 @@ if __name__ == "__main__":
     )
 
     parser.display_data()
+    # pprint(parser.complete_data)
+    print(len(parser.complete_data))
     # pprint(parser.normforce_data)
     # print(len(parser.camber_data))
     # pprint(parser.complete_data)
