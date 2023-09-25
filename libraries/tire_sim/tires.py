@@ -46,10 +46,16 @@ class Stats(Enum):
     SLIP_RATIO = auto()
 
 
+# I should be getting 50 graphs
+EXPECTED = {
+    Stats.CAMBER_ANGLE: [0, 2, 4, 1, 3],
+    Stats.NORMAL_FORCE: [350, 150, 50, 250, 100],
+    Stats.PRESSURE: [8, 12],
+}
 TOLERANCE = {
-    Stats.CAMBER_ANGLE: 0.5,
-    Stats.NORMAL_FORCE: 100,
-    Stats.PRESSURE: 10,
+    Stats.CAMBER_ANGLE: 1.5,  # 0,2, 4, 1, 3
+    Stats.NORMAL_FORCE: 449,  # 350, 150,50, 250, 100 *2
+    Stats.PRESSURE: 20,
 }
 
 
@@ -68,6 +74,7 @@ class TireParser:
         print(f"Tire ID being queried: {self.tireid}")
         self.time_range = self.compute_time_range()
         self.complete_data = self.create_complete_data_dict()
+        self.num_success = 0
 
     def load_data(self, path_to_data_spreadsheet):
         """Load data into attributes to our tire parser from the spreadsheet.
@@ -110,6 +117,7 @@ class TireParser:
         :return: _description_
         :rtype: _type_
         """
+        # print(self.normforce_data[idx][0])
         dict_to_append_to[idx].append(
             (Stats.NORMAL_FORCE.name, float(self.normforce_data[idx][0]))
         )
@@ -137,50 +145,67 @@ class TireParser:
         old_camber = self.camber_data[0]
         self.append_all_data(data_dict, 0)
         for i in range(self.time_range - 1):
-            if not old_normforce or (
+            if (
                 abs(old_normforce - self.normforce_data[i])
                 > TOLERANCE[Stats.NORMAL_FORCE]
             ):
                 data_dict = self.append_all_data(data_dict, i)
                 old_normforce = self.normforce_data[i]
-            if (
-                not old_pressure
-                or abs(old_pressure - self.pressure_data[i]) > TOLERANCE[Stats.PRESSURE]
-            ):
+            if abs(old_pressure - self.pressure_data[i]) > TOLERANCE[Stats.PRESSURE]:
                 data_dict = self.append_all_data(data_dict, i)
                 old_pressure = self.pressure_data[i]
-            if (
-                not old_camber
-                or abs(old_camber - self.camber_data[i]) > TOLERANCE[Stats.CAMBER_ANGLE]
-            ):
+            if abs(old_camber - self.camber_data[i]) > TOLERANCE[Stats.CAMBER_ANGLE]:
                 data_dict = self.append_all_data(data_dict, i)
                 old_camber = self.camber_data[i]
 
         return data_dict
 
+    def validate_graph(self, times, i):
+        """Validate our data
+
+        :param times: _description_
+        :type times: _type_
+        :param i: _description_
+        :type i: _type_
+        :return: _description_
+        :rtype: _type_
+        """
+        if (
+            max(self.slip_data[times[i - 1] : times[i]]) > 0
+            and min(self.slip_data[times[i - 1] : times[i]]) > 0
+        ):
+            return False
+
+        if (
+            max(self.slip_data[times[i - 1] : times[i]]) < 0
+            and min(self.slip_data[times[i - 1] : times[i]]) < 0
+        ):
+            return False
+
+        if len(self.slip_data[times[i - 1] : times[i]]) < 500:
+            return False
+        return True
+
     def display_data(self):
         """For every different value of pressure, camber, and normal force, compute the SR + Lateral force graph"""
         times = list(self.complete_data.keys())
-        print(len(times))
         for i in range(len(times)):
             if i == 0:
                 continue
 
-            if (
-                max(self.slip_data[times[i - 1] : times[i]]) > 0
-                and min(self.slip_data[times[i - 1] : times[i]]) > 0
-            ):
+            if not self.validate_graph(times, i):
                 continue
 
-            if (
-                max(self.slip_data[times[i - 1] : times[i]]) < 0
-                and min(self.slip_data[times[i - 1] : times[i]]) < 0
-            ):
-                continue
-            plt.scatter(
+            # plt.scatter(
+            #     self.slip_data[times[i - 1] : times[i]],
+            #     self.latforce_data[times[i - 1] : times[i]],
+            #     marker="o",
+            # )
+
+            plt.plot(
                 self.slip_data[times[i - 1] : times[i]],
                 self.latforce_data[times[i - 1] : times[i]],
-                marker="o",
+                # marker="o",
             )
             plt.figtext(
                 0.1,
@@ -190,11 +215,14 @@ class TireParser:
             plt.xlabel("Slip")
             plt.ylabel("Lateral Force")
             plt.title(
-                f"Normal Force = {self.complete_data[times[i]][0][1]} || Pressure = {self.complete_data[times[i]][1][1]} || Camber = {self.complete_data[times[i]][2][1]}\n"
+                f"Normal Force = {self.complete_data[times[i]][0][1]}"
+                + f"|| Pressure = {self.complete_data[times[i]][1][1]}"
+                + f"|| Camber = {self.complete_data[times[i]][2][1]}"
             )
-            plt.savefig(f"assets/imgs/graph #{i}.png", format="png")
+            # plt.savefig(f"assets/imgs/graph #{i}.png", format="png")
+            plt.show()
+            self.num_success += 1
             plt.clf()
-            # plt.show()
 
 
 if __name__ == "__main__":
@@ -206,6 +234,8 @@ if __name__ == "__main__":
     parser.display_data()
     # pprint(parser.complete_data)
     print(len(parser.complete_data))
+    print(f"number of graphs: {parser.num_success}")
+    # pprint(list(parser.complete_data.items())[400:420])
     # pprint(parser.normforce_data)
     # print(len(parser.camber_data))
     # pprint(parser.complete_data)
