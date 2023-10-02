@@ -49,13 +49,13 @@ class Stats(Enum):
 # I should be getting 50 graphs
 EXPECTED = {
     Stats.CAMBER_ANGLE: [0, 2, 4, 1, 3],
-    Stats.NORMAL_FORCE: [350, 150, 50, 250, 100],
-    Stats.PRESSURE: [8, 12],
+    Stats.NORMAL_FORCE: [-1600, -1200, -700, -400, -200],
+    Stats.PRESSURE: [55, 80],
 }
 TOLERANCE = {
-    Stats.CAMBER_ANGLE: 1.5,  # 0,2, 4, 1, 3
-    Stats.NORMAL_FORCE: 449,  # 350, 150,50, 250, 100 *2
-    Stats.PRESSURE: 20,
+    Stats.CAMBER_ANGLE: 0.9,  # 0,2, 4, 1, 3
+    Stats.NORMAL_FORCE: 399,  # 350, 150,50, 250, 100 *2
+    Stats.PRESSURE: 9,
 }
 
 
@@ -72,6 +72,7 @@ class TireParser:
         summary_data = pd.read_excel(path_to_summary_table)
         self.load_data(path_to_data_spreadsheet)
         print(f"Tire ID being queried: {self.tireid}")
+        self.debug_list = []
         self.time_range = self.compute_time_range()
         self.complete_data = self.create_complete_data_dict()
         self.num_success = 0
@@ -81,7 +82,7 @@ class TireParser:
         We care primarily about normal force, pressure, and camber data.
 
         :param path_to_data_spreadsheet: _description_
-        :type path_to_data_spreadsheet: _type_
+        :type path_to_data_sprself.debug_list = []eadsheet: _type_
         """
         raw_data = loadmat(path_to_data_spreadsheet)
         self.tireid = raw_data["tireid"]
@@ -115,19 +116,35 @@ class TireParser:
         :param idx: _description_
         :type idx: _type_
         :return: _description_
-        :rtype: _type_
+        :rtype: _type_    data_dict = {
+
         """
         # print(self.normforce_data[idx][0])
         dict_to_append_to[idx].append(
-            (Stats.NORMAL_FORCE.name, float(self.normforce_data[idx][0]))
+            (
+                Stats.NORMAL_FORCE.name,
+                self.find_closest_value(
+                    Stats.NORMAL_FORCE, self.normforce_data[idx][0]
+                ),
+            )
         )
         dict_to_append_to[idx].append(
-            (Stats.PRESSURE.name, float(self.pressure_data[idx][0]))
+            (
+                Stats.PRESSURE.name,
+                self.find_closest_value(Stats.PRESSURE, self.pressure_data[idx][0]),
+            )
         )
         dict_to_append_to[idx].append(
-            (Stats.CAMBER_ANGLE.name, float(self.camber_data[idx][0]))
+            (
+                Stats.CAMBER_ANGLE.name,
+                self.find_closest_value(Stats.CAMBER_ANGLE, self.camber_data[idx][0]),
+            )
         )
         return dict_to_append_to
+
+    def find_closest_value(self, stat, value):
+        closest = min(EXPECTED[stat], key=lambda x: abs(x - value))
+        return closest
 
     def create_complete_data_dict(self):
         """This function is responsible for creating a dictionary.
@@ -145,15 +162,19 @@ class TireParser:
         old_camber = self.camber_data[0]
         self.append_all_data(data_dict, 0)
         for i in range(self.time_range - 1):
+            # if i % 885 == 0:
+            #     self.append_all_data(data_dict, i)
             if (
                 abs(old_normforce - self.normforce_data[i])
                 > TOLERANCE[Stats.NORMAL_FORCE]
             ):
                 data_dict = self.append_all_data(data_dict, i)
                 old_normforce = self.normforce_data[i]
+                self.debug_list.append(old_normforce)
             if abs(old_pressure - self.pressure_data[i]) > TOLERANCE[Stats.PRESSURE]:
                 data_dict = self.append_all_data(data_dict, i)
                 old_pressure = self.pressure_data[i]
+
             if abs(old_camber - self.camber_data[i]) > TOLERANCE[Stats.CAMBER_ANGLE]:
                 data_dict = self.append_all_data(data_dict, i)
                 old_camber = self.camber_data[i]
@@ -170,20 +191,24 @@ class TireParser:
         :return: _description_
         :rtype: _type_
         """
+        # If all data is positive
         if (
             max(self.slip_data[times[i - 1] : times[i]]) > 0
             and min(self.slip_data[times[i - 1] : times[i]]) > 0
         ):
             return False
 
+        # If all data is negative
         if (
             max(self.slip_data[times[i - 1] : times[i]]) < 0
             and min(self.slip_data[times[i - 1] : times[i]]) < 0
         ):
             return False
 
+        # If there's less than 500 len of data
         if len(self.slip_data[times[i - 1] : times[i]]) < 500:
             return False
+
         return True
 
     def display_data(self):
@@ -195,12 +220,6 @@ class TireParser:
 
             if not self.validate_graph(times, i):
                 continue
-
-            # plt.scatter(
-            #     self.slip_data[times[i - 1] : times[i]],
-            #     self.latforce_data[times[i - 1] : times[i]],
-            #     marker="o",
-            # )
 
             plt.plot(
                 self.slip_data[times[i - 1] : times[i]],
@@ -232,9 +251,15 @@ if __name__ == "__main__":
     )
 
     parser.display_data()
-    # pprint(parser.complete_data)
-    print(len(parser.complete_data))
+    pprint(parser.complete_data)
+    # print(len(parser.complete_data))
     print(f"number of graphs: {parser.num_success}")
+    # pprint(sorted(parser.debug_list))
+    # rounded_data = [int(x) for x in parser.debug_list]
+    # plt.hist(rounded_data, 10)
+    # plt.title("normforce distribution")
+    # plt.show()
+
     # pprint(list(parser.complete_data.items())[400:420])
     # pprint(parser.normforce_data)
     # print(len(parser.camber_data))
