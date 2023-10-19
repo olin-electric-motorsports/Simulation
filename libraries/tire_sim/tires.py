@@ -48,14 +48,20 @@ class Stats(Enum):
 
 # I should be getting 50 graphs
 EXPECTED = {
-    Stats.CAMBER_ANGLE: [0, 2, 4, 1, 3],
-    Stats.NORMAL_FORCE: [-1600, -1200, -700, -400, -200],
-    Stats.PRESSURE: [55, 80],
+    Stats.CAMBER_ANGLE: [0, 2, 4, 1, 3],  #
+    Stats.NORMAL_FORCE: [
+        -1556.88,
+        -667.233,
+        -222.411,
+        -1112.06,
+        -444.822,
+    ],  # NEWTONS. DATASHEET HAS POUND-FORCE
+    Stats.PRESSURE: [55.15, 82.73],  # KILOPASCALs. DATASHEET HAS PSI
 }
 TOLERANCE = {
     Stats.CAMBER_ANGLE: 0.9,  # 0,2, 4, 1, 3
-    Stats.NORMAL_FORCE: 399,  # 350, 150,50, 250, 100 *2
-    Stats.PRESSURE: 9,
+    Stats.NORMAL_FORCE: 111.206,  # Giving about 25 lb force of leeway
+    Stats.PRESSURE: 7,  # giving about 1 psi diff
 }
 
 
